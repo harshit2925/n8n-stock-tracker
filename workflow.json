@@ -1,0 +1,1482 @@
+{
+  "name": "Stock Tracker",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        208,
+        96
+      ],
+      "id": "6e269348-bb97-4fea-b526-3578beaa759c",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Work out the current results quarter (same logic as reports.js)\nconst now = new Date();\nconst y = now.getFullYear(), m = now.getMonth() + 1;\nlet endMonth, endYear;\nif (m <= 3)      { endMonth = 12; endYear = y - 1; }\nelse if (m <= 6) { endMonth = 3;  endYear = y; }\nelse if (m <= 9) { endMonth = 6;  endYear = y; }\nelse             { endMonth = 9;  endYear = y; }\nconst q = { 6: 1, 9: 2, 12: 3, 3: 4 }[endMonth];\nconst fy = (endMonth === 3 ? endYear : endYear + 1) % 100;\nconst currentQuarter = `Q${q}FY${fy}`;\n\n// Keep stocks that are NOT already Done for this quarter\nconst toCheck = $input.all()\n  .map(item => item.json)\n  .filter(row => !(row.report_status === 'Done' && row.report_quarter === currentQuarter))\n  .map(row => String(row.stock_code || '').trim().toUpperCase())\n  .filter(code => /^[A-Z0-9_-]+$/.test(code)); // safety: only plain stock codes\n\n// Nothing to check? Stop this branch here.\nif (toCheck.length === 0) return [];\n\nreturn [{ json: { codes: toCheck.join(','), count: toCheck.length, quarter: currentQuarter } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        192
+      ],
+      "id": "67a52b44-4679-4a18-9021-9ab78ebdc155",
+      "name": "Pick stocks to check"
+    },
+    {
+      "parameters": {
+        "command": "=node C:\\scraper\\reports.js {{ $json.codes }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        880,
+        192
+      ],
+      "id": "99c3ebe3-f268-4026-8c3f-fee9c9e4aa0c",
+      "name": "Run reports.js"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = JSON.parse($input.first().json.stdout);\nreturn results.map(r => ({ json: r }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        192
+      ],
+      "id": "5d87ad16-f6a6-4a63-bc6f-83e87f11cb51",
+      "name": "Split results"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "096b6d56-ddde-4110-ae7a-91888f3125d5",
+              "leftValue": "={{ $json.result }}",
+              "rightValue": "Found",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1328,
+        192
+      ],
+      "id": "d7771dd1-8362-465b-a98d-6ad5af585102",
+      "name": "Found?"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1552,
+        96
+      ],
+      "id": "955c8c32-2a78-4473-8334-3aa022fbbb23",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "={{ $json.stock_code }}",
+        "limit": 1,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "YOUR_STOCK_REPORTS_FOLDER_ID",
+            "mode": "id"
+          },
+          "whatToSearch": "folders"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1856,
+        112
+      ],
+      "id": "5f2a9818-9623-44e9-8224-054dce5374ed",
+      "name": "Find company folder",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "iGv3SrfXIXnosW7n",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a5b741ef-bb75-41dd-850f-c0a756c35a4b",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1856,
+        -64
+      ],
+      "id": "a0771b42-8bb7-4d90-892f-f9f1c0a34ca1",
+      "name": "Folder exists?"
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $('Loop Over Items').item.json.stock_code }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_STOCK_REPORTS_FOLDER_ID"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2048,
+        80
+      ],
+      "id": "8b2a6916-080a-4665-9b82-31e75bffd427",
+      "name": "Create company folder",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "iGv3SrfXIXnosW7n",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ebaf36be-879c-48f8-869b-c854c4f6b260",
+              "name": "folder_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2224,
+        -80
+      ],
+      "id": "556fa79e-4c9f-436e-b2bb-7db917636bd3",
+      "name": "Folder ID"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Loop Over Items').item.json.pdf_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.bseindia.com/"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2432,
+        -80
+      ],
+      "id": "fef39f90-8548-4c2c-b075-84b9b1b18cda",
+      "name": "Download PDF",
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "name": "={{ $('Loop Over Items').item.json.file_name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Folder ID').item.json.folder_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2432,
+        112
+      ],
+      "id": "9e85ded6-63df-4e40-b0ac-722d9e8aff54",
+      "name": "Upload PDF",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "iGv3SrfXIXnosW7n",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "n8n_Projects_HRG",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1023695635,
+          "mode": "list",
+          "cachedResultName": "Stock Prices",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit#gid=1023695635"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "stock_code": "={{ $('Loop Over Items').item.json.stock_code }}",
+            "report_date": "={{ $('Loop Over Items').item.json.report_date }}",
+            "report_quarter": "={{ $('Loop Over Items').item.json.report_quarter }}",
+            "report_status": "Done",
+            "report_title": "={{ $('Loop Over Items').item.json.report_title }}",
+            "report_link": "==HYPERLINK(\"{{ $json.webViewLink }}\",\"📄 Open report\")"
+          },
+          "matchingColumns": [
+            "stock_code"
+          ],
+          "schema": [
+            {
+              "id": "stock_code",
+              "displayName": "stock_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stock_name",
+              "displayName": "stock_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "today_date",
+              "displayName": "today_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price_today",
+              "displayName": "price_today",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "yesterday_date",
+              "displayName": "yesterday_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price_yesterday",
+              "displayName": "price_yesterday",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "change",
+              "displayName": "change",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "change_pct",
+              "displayName": "change_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "trend",
+              "displayName": "trend",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pressure",
+              "displayName": "pressure",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "day_high",
+              "displayName": "day_high",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "day_low",
+              "displayName": "day_low",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "volume",
+              "displayName": "volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_quarter",
+              "displayName": "report_quarter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_status",
+              "displayName": "report_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_date",
+              "displayName": "report_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_title",
+              "displayName": "report_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_link",
+              "displayName": "report_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2720,
+        128
+      ],
+      "id": "6582fa29-d6e7-47bc-b424-3f7746d70a01",
+      "name": "Mark done",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Q1vtocbL9zeur4fx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "node C:\\scraper\\stocks.js"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        432,
+        0
+      ],
+      "id": "71926cfc-783d-4ec3-870f-4a734224b657",
+      "name": "Run stocks.js"
+    },
+    {
+      "parameters": {
+        "jsCode": "// stdout is text — turn it into real data\nconst stocks = JSON.parse($input.first().json.stdout);\n\n// one n8n item per stock\nreturn stocks.map(stock => ({ json: stock }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        0
+      ],
+      "id": "7b408bc6-19d1-4490-8086-b078ff2a07f6",
+      "name": "Split prices"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "n8n_Projects_HRG",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1023695635,
+          "mode": "list",
+          "cachedResultName": "Stock Prices",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit#gid=1023695635"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "stock_code"
+          ],
+          "schema": [
+            {
+              "id": "stock_code",
+              "displayName": "stock_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stock_name",
+              "displayName": "stock_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "today_date",
+              "displayName": "today_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price_today",
+              "displayName": "price_today",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "yesterday_date",
+              "displayName": "yesterday_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price_yesterday",
+              "displayName": "price_yesterday",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "change",
+              "displayName": "change",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "change_pct",
+              "displayName": "change_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "trend",
+              "displayName": "trend",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "pressure",
+              "displayName": "pressure",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "day_high",
+              "displayName": "day_high",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "day_low",
+              "displayName": "day_low",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "volume",
+              "displayName": "volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        880,
+        0
+      ],
+      "id": "ad21601c-82d4-457a-b097-cb818d7598b6",
+      "name": "Update Prices",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Q1vtocbL9zeur4fx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "n8n_Projects_HRG",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1023695635,
+          "mode": "list",
+          "cachedResultName": "Stock Prices",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit#gid=1023695635"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "stock_code": "={{ $json.stock_code }}",
+            "report_quarter": "={{ $json.report_quarter }}",
+            "report_status": "={{ $json.result }}"
+          },
+          "matchingColumns": [
+            "stock_code"
+          ],
+          "schema": [
+            {
+              "id": "stock_code",
+              "displayName": "stock_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stock_name",
+              "displayName": "stock_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "today_date",
+              "displayName": "today_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price_today",
+              "displayName": "price_today",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "yesterday_date",
+              "displayName": "yesterday_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price_yesterday",
+              "displayName": "price_yesterday",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "change",
+              "displayName": "change",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "change_pct",
+              "displayName": "change_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "trend",
+              "displayName": "trend",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pressure",
+              "displayName": "pressure",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "day_high",
+              "displayName": "day_high",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "day_low",
+              "displayName": "day_low",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "volume",
+              "displayName": "volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_quarter",
+              "displayName": "report_quarter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_status",
+              "displayName": "report_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_date",
+              "displayName": "report_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_title",
+              "displayName": "report_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_link",
+              "displayName": "report_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1552,
+        352
+      ],
+      "id": "af025c4f-860a-4960-8824-1844d361e861",
+      "name": "Mark Not yet/Failed",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Q1vtocbL9zeur4fx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Daily Prices\nYahoo Finance -> Sheets",
+        "height": 80,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        592,
+        -112
+      ],
+      "id": "26a1683c-f155-4771-a6b4-b2e83f7999a9",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Quarterly Reports\nBSE -> Drive",
+        "height": 80,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        592,
+        352
+      ],
+      "id": "45bdf76c-2f91-4a9c-97d0-4368b812edf4",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "n8n_Projects_HRG",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1023695635,
+          "mode": "list",
+          "cachedResultName": "Stock Prices",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit#gid=1023695635"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "report_status": "Failed",
+            "report_quarter": "={{ $('Loop Over Items').item.json.report_quarter }}",
+            "stock_code": "={{ $('Loop Over Items').item.json.stock_code }}"
+          },
+          "matchingColumns": [
+            "stock_code"
+          ],
+          "schema": [
+            {
+              "id": "stock_code",
+              "displayName": "stock_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stock_name",
+              "displayName": "stock_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "today_date",
+              "displayName": "today_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price_today",
+              "displayName": "price_today",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "yesterday_date",
+              "displayName": "yesterday_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price_yesterday",
+              "displayName": "price_yesterday",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "change",
+              "displayName": "change",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "change_pct",
+              "displayName": "change_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "trend",
+              "displayName": "trend",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "pressure",
+              "displayName": "pressure",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "day_high",
+              "displayName": "day_high",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "day_low",
+              "displayName": "day_low",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "volume",
+              "displayName": "volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "report_quarter",
+              "displayName": "report_quarter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "report_status",
+              "displayName": "report_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "report_date",
+              "displayName": "report_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "report_title",
+              "displayName": "report_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "report_link",
+              "displayName": "report_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2704,
+        -48
+      ],
+      "id": "f1586d5c-950b-45a4-9583-d54bc50a4a67",
+      "name": "Mark Failed(download)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Q1vtocbL9zeur4fx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "n8n_Projects_HRG",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1023695635,
+          "mode": "list",
+          "cachedResultName": "Stock Prices",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit#gid=1023695635"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        432,
+        192
+      ],
+      "id": "1f898b3e-323d-4fcb-adb6-bf6a45823db7",
+      "name": "Read Stock Prices Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Q1vtocbL9zeur4fx",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Run stocks.js",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Stock Prices Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick stocks to check": {
+      "main": [
+        [
+          {
+            "node": "Run reports.js",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run reports.js": {
+      "main": [
+        [
+          {
+            "node": "Split results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split results": {
+      "main": [
+        [
+          {
+            "node": "Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Find company folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find company folder": {
+      "main": [
+        [
+          {
+            "node": "Folder exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Folder exists?": {
+      "main": [
+        [
+          {
+            "node": "Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create company folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create company folder": {
+      "main": [
+        [
+          {
+            "node": "Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Folder ID": {
+      "main": [
+        [
+          {
+            "node": "Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download PDF": {
+      "main": [
+        [
+          {
+            "node": "Upload PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed(download)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload PDF": {
+      "main": [
+        [
+          {
+            "node": "Mark done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed(download)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark done": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run stocks.js": {
+      "main": [
+        [
+          {
+            "node": "Split prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split prices": {
+      "main": [
+        [
+          {
+            "node": "Update Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Stock Prices Sheet": {
+      "main": [
+        [
+          {
+            "node": "Pick stocks to check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Failed(download)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found?": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Not yet/Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Asia/Kolkata"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "tags": []
+}

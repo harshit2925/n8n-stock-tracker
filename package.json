@@ -1,0 +1,13 @@
+{
+  "name": "n8n-stock-tracker",
+  "version": "1.0.0",
+  "description": "Daily NSE stock prices and quarterly BSE results, automated with n8n",
+  "scripts": {
+    "prices": "node stocks.js",
+    "reports": "node reports.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
